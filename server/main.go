@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log"
 	"net"
 	"syscall"
 	"unsafe"
 
-	"github.com/Microsoft/go-winio"
+	"github.com/MarcosDY/npipeSample/server/pods"
+	"github.com/MarcosDY/npipeSample/server/process"
 	"github.com/spiffe/go-spiffe/v2/proto/spiffe/workload"
 	"github.com/zeebo/errs"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
@@ -25,6 +26,7 @@ const (
 var (
 	kernel32                        = syscall.NewLazyDLL("kernel32.dll")
 	getNamedPipeClientProcessIdFunc = kernel32.NewProc("GetNamedPipeClientProcessId")
+	pid                             = flag.Int("pid", 0, "")
 )
 
 func main() {
@@ -34,16 +36,41 @@ func main() {
 }
 
 func run(ctx context.Context) (err error) {
-	listener, err := winio.ListenPipe(pipeName, nil)
-	if err != nil {
-		return errs.Wrap(err)
-	}
-	defer listener.Close()
+	flag.Parse()
 
-	server := grpc.NewServer(grpc.Creds(new(TransportCredentials)))
-	workload.RegisterSpiffeWorkloadAPIServer(server, &Server{})
-	log.Printf("Listening on %s", pipeName)
-	return server.Serve(listener)
+	helper := process.CreateHelper()
+	log.Println(*pid)
+	cID, err := helper.GetContainerIDByProcess(int32(*pid))
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to get containerID by Process: %v", err)
+	}
+	log.Println(cID)
+
+	client, err := pods.NewClient()
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed create client: %v", err)
+	}
+
+	s, err := client.GetPodByContainer(cID)
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to get pod container: %v", err)
+	}
+	for i, ss := range s {
+		log.Printf("%v - %q\n", i, ss)
+	}
+
+	return nil
+
+	// listener, err := winio.ListenPipe(pipeName, nil)
+	// if err != nil {
+	// return errs.Wrap(err)
+	// }
+	// defer listener.Close()
+
+	// server := grpc.NewServer(grpc.Creds(new(TransportCredentials)))
+	// workload.RegisterSpiffeWorkloadAPIServer(server, &Server{})
+	// log.Printf("Listening on %s", pipeName)
+	// return server.Serve(listener)
 }
 
 type Server struct {
@@ -69,10 +96,17 @@ func (s *Server) FetchX509SVID(req *workload.X509SVIDRequest, stream workload.Sp
 
 	log.Printf("ProcessID: %d\n", pID)
 
+	helper := process.CreateHelper()
+
+	cID, err := helper.GetContainerIDByProcess(int32(pID))
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to get containerID by Process: %v", err)
+	}
+
 	return stream.Send(&workload.X509SVIDResponse{
 		Svids: []*workload.X509SVID{
 			{
-				SpiffeId: "someID",
+				SpiffeId: cID,
 			},
 		},
 	})

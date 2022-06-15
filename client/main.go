@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 	"time"
@@ -9,14 +10,17 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/spiffe/go-spiffe/v2/proto/spiffe/workload"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
-const (
-	pipeName = `\\.\pipe\wservice`
+var (
+	pipeNameFlag = flag.String("pname", `\\.\pipe\spire-agent\public\api`, "pipe name")
 )
 
 func main() {
-	conn, err := grpc.Dial(pipeName, grpc.WithInsecure(), grpc.WithContextDialer(
+	flag.Parse()
+
+	conn, err := grpc.Dial(*pipeNameFlag, grpc.WithInsecure(), grpc.WithContextDialer(
 		winio.DialPipeContext,
 	))
 	if err != nil {
@@ -28,7 +32,10 @@ func main() {
 
 	client := workload.NewSpiffeWorkloadAPIClient(conn)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	header := metadata.Pairs("workload.spiffe.io", "true")
+	ctx := metadata.NewOutgoingContext(context.Background(), header)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+
 	defer cancel()
 
 	stream, err := client.FetchX509SVID(ctx, &workload.X509SVIDRequest{})
