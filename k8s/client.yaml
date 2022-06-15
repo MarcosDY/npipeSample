@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client
+  labels:
+    app: client
+spec:
+  selector:
+    matchLabels:
+      app: client
+  template:
+    metadata:
+      labels:
+        app: client
+    spec:
+      containers:
+        - name: client
+          image: marcosdy/npipe-client:ltsc2019
+          volumeMounts:
+            - name: server-named-pipe
+              mountPath: \\.\pipe\wservice
+      nodeSelector:
+        kubernetes.io/os: windows
+      volumes:
+        - name: server-named-pipe
+          hostPath:
+            path: \\.\pipe\wservice
+            type: null
