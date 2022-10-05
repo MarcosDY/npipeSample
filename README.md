@@ -35,3 +35,11 @@ PS C:\> .\client.exe
 2022/04/04 12:59:22 SPIFFEID: "someID"
 ```
 
+### K8s
+
+Create cluster:
+```
+eksctl create cluster -f cluster/cluster.yaml
+```
+
+
